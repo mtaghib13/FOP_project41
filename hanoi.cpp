@@ -20,6 +20,7 @@ int main() {
     getline(cin,m);
     hanoi(n,s,komak,m);
     return 0;
+    // hello bakhtiarvand
 }
 
 
