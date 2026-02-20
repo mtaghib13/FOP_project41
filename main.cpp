@@ -8,6 +8,7 @@
 #include <SDL_image.h>
 #include <SDL2/SDL_image.h>
 #include "tinyfiledialogs.h"
+#include <SDL2/SDL2_gfxPrimitives.h>
 using namespace std;
 
 // ════════════════════════════════════════════
@@ -33,6 +34,14 @@ static const int   BASE_CAT_PANEL_WIDTH  = 130;
 static const int   BASE_STAGE_WIDTH      = 360;
 static const int   BASE_STAGE_HEIGHT     = 270;
 static const int   BASE_SPRITE_THUMB     = 70;
+static bool costumeEditMode = false;
+static SDL_Texture* costumeCanvas = nullptr;
+static int canvasW = 480, canvasH = 360;
+static Uint8 penColorR = 0, penColorG = 0, penColorB = 0;
+static int penSize = 3;
+static bool isDrawing = false;
+static int lastDrawX = -1, lastDrawY = -1;
+static int selectedCostumeSpriteIdx = -1;
 
 // ════════════════════════════════════════════
 //  Scaling system
@@ -890,6 +899,8 @@ int main(int argc, char* argv[]) {
     int winW=BASE_WIDTH, winH=BASE_HEIGHT;
     L.update(winW,winH);
     SDL_StartTextInput();
+    SDL_SetRenderDrawBlendMode(rnd, SDL_BLENDMODE_BLEND);
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
 
     vector<Sprite> sprites;
     sprites.push_back(createDefaultSprite("Sprite1",0,0,{255,140,0,255}));
@@ -993,6 +1004,19 @@ int main(int argc, char* argv[]) {
                         }
                         continue;
                         }
+                    if(costumeEditMode && costumeCanvas) {
+                        int editorX = L.PALETTE_WIDTH + L.STAGE_WIDTH + 20;
+                        int editorY = L.TOOLBAR_HEIGHT + 20;
+
+                        int drawX = mx - editorX - 20;
+                        int drawY = my - editorY - 20;
+
+                        if(drawX >= 0 && drawX < canvasW && drawY >= 0 && drawY < canvasH) {
+                            isDrawing = true;
+                            lastDrawX = drawX;
+                            lastDrawY = drawY;
+                        }
+                    }
 
                     int backBtnX = frontBtnX - layerBtnW - 5;
                     if (mx >= backBtnX && mx <= backBtnX + layerBtnW &&
@@ -1004,6 +1028,32 @@ int main(int argc, char* argv[]) {
                         continue;
                         }
                 }
+                if(costumeEditMode && costumeCanvas) {
+                    int editorX = L.PALETTE_WIDTH + L.STAGE_WIDTH + 20;
+                    int editorY = L.TOOLBAR_HEIGHT + 20;
+                    int toolbarY = editorY + canvasH + 30;
+
+                    if(mx >= editorX+20 && mx <= editorX+80 && my >= toolbarY && my <= toolbarY+30) {
+                        penColorR = 0; penColorG = 0; penColorB = 0;
+                    }
+                    if(mx >= editorX+90 && mx <= editorX+150 && my >= toolbarY && my <= toolbarY+30) {
+                        penColorR = 255; penColorG = 255; penColorB = 255;
+                    }
+                    if(mx >= editorX+160 && mx <= editorX+220 && my >= toolbarY && my <= toolbarY+30) {
+                        if(selectedCostumeSpriteIdx >= 0 && selectedCostumeSpriteIdx < (int)sprites.size()) {
+                            if(sprites[selectedCostumeSpriteIdx].uploadedTexture)
+                                SDL_DestroyTexture(sprites[selectedCostumeSpriteIdx].uploadedTexture);
+                            sprites[selectedCostumeSpriteIdx].uploadedTexture = costumeCanvas;
+                            costumeCanvas = nullptr;
+                        }
+                        costumeEditMode = false;
+                    }
+                    if(mx >= editorX+230 && mx <= editorX+290 && my >= toolbarY && my <= toolbarY+30) {
+                        if(costumeCanvas) SDL_DestroyTexture(costumeCanvas);
+                        costumeCanvas = nullptr;
+                        costumeEditMode = false;
+                    }
+                }
                 int panelX=L.PALETTE_WIDTH, stageW=L.STAGE_WIDTH;
                 int spriteAreaY=L.TOOLBAR_HEIGHT+L.STAGE_HEIGHT+5;
                 int thumbSize=L.SPRITE_THUMB;
@@ -1013,6 +1063,7 @@ int main(int argc, char* argv[]) {
 
                 // کلیک روی دکمه Upload
                 {
+
                     int spriteAreaY = L.TOOLBAR_HEIGHT + L.STAGE_HEIGHT + 5;
                     int thumbSz = L.SPRITE_THUMB;
                     int infoY = spriteAreaY + thumbSz + 10;
@@ -1023,6 +1074,7 @@ int main(int argc, char* argv[]) {
                     int uploadBtnW = (int)(60 * L.s), uploadBtnH = fieldH2;
                     int uploadBtnX = infoX + fieldW2 * 2 - uploadBtnW - 10;
                     int uploadBtnY = infoY;
+
 
                     if(mx >= uploadBtnX && mx <= uploadBtnX + uploadBtnW &&
                        my >= uploadBtnY && my <= uploadBtnY + uploadBtnH) {
@@ -1051,6 +1103,36 @@ int main(int argc, char* argv[]) {
                                     cout << "Failed to load: " << IMG_GetError() << endl;
                                 }
                             }
+                        }
+                       }
+                }
+
+                {
+                    int spriteAreaY = L.TOOLBAR_HEIGHT + L.STAGE_HEIGHT + 5;
+                    int thumbSz = L.SPRITE_THUMB;
+                    int infoY = spriteAreaY + thumbSz + 10;
+                    int infoX = L.PALETTE_WIDTH + 5;
+                    int fieldW2 = (int)(L.STAGE_WIDTH * 0.35f);
+                    int fieldH2 = (int)(22 * L.s);
+
+                    int editBtnW = (int)(60*L.s), editBtnH = fieldH2;
+                    int uploadBtnW = (int)(60*L.s);
+                    int editBtnX = infoX + fieldW2*2 - uploadBtnW - editBtnW - 15;
+                    int editBtnY = infoY;
+
+
+                    if(mx >= editBtnX && mx <= editBtnX + editBtnW &&
+                       my >= editBtnY && my <= editBtnY + editBtnH) {
+                        costumeEditMode = !costumeEditMode;
+                        if(costumeEditMode) {
+                            selectedCostumeSpriteIdx = selectedSpriteIdx;
+                            if(costumeCanvas) SDL_DestroyTexture(costumeCanvas);
+                            costumeCanvas = SDL_CreateTexture(rnd, SDL_PIXELFORMAT_RGBA8888,
+                                                              SDL_TEXTUREACCESS_TARGET, canvasW, canvasH);
+                            SDL_SetRenderTarget(rnd, costumeCanvas);
+                            SDL_SetRenderDrawColor(rnd, 255, 255, 255, 255);
+                            SDL_RenderClear(rnd);
+                            SDL_SetRenderTarget(rnd, nullptr);
                         }
                        }
                 }
@@ -1258,11 +1340,37 @@ int main(int argc, char* argv[]) {
                     sprites[dragSpriteIdx].x=(float)(mx-spDragOffX-stageCX);
                     sprites[dragSpriteIdx].y=(float)(stageCY-(my-spDragOffY));
                 }
+
                 { int flagX=(int)(winW*0.4f),flagSz=L.TOOLBAR_HEIGHT-10,resetX=flagX+2*(flagSz+10); resetHovered=(mx>=resetX&&mx<=resetX+(int)(60*L.s)&&my>=5&&my<=5+flagSz); }
+                if(costumeEditMode && costumeCanvas && isDrawing) {
+                    int editorX = L.PALETTE_WIDTH + L.STAGE_WIDTH + 20;
+                    int editorY = L.TOOLBAR_HEIGHT + 20;
+
+                    int drawX = mx - editorX - 20;
+                    int drawY = my - editorY - 20;
+
+                    if(drawX >= 0 && drawX < canvasW && drawY >= 0 && drawY < canvasH) {
+                        SDL_SetRenderTarget(rnd, costumeCanvas);
+                        SDL_SetRenderDrawColor(rnd, penColorR, penColorG, penColorB, 255);
+
+                        if(lastDrawX >= 0 && lastDrawY >= 0) {
+                            SDL_RenderDrawLine(rnd, lastDrawX, lastDrawY, drawX, drawY);
+                        }
+
+                        SDL_SetRenderTarget(rnd, nullptr);
+                        lastDrawX = drawX;
+                        lastDrawY = drawY;
+                    }
+                }
             }
 
             // MOUSE UP
             if (e.type==SDL_MOUSEBUTTONUP&&e.button.button==SDL_BUTTON_LEFT) {
+                if(costumeEditMode) {
+                    isDrawing = false;
+                    lastDrawX = -1;
+                    lastDrawY = -1;
+                }
                 if(dragBlockId>=0){
                     Block* db=findBlock(blocks,dragBlockId);
                     if(db){
@@ -1503,6 +1611,12 @@ updateAndDrawParticles(rnd, stageX, stageY, stageW, stageH, dt);            int 
                     drawText(rnd, uploadBtnX+10, uploadBtnY+(uploadBtnH-textHeight("A"))/2, "Upload", 255,255,255,255);
                     int row4Y = row3Y + fieldH2 + 8;
 
+                    int editBtnW = (int)(60*L.s), editBtnH = fieldH2;
+                    int editBtnX = uploadBtnX - editBtnW - 10;
+                    int editBtnY = uploadBtnY;
+                    fillRoundedRect(rnd, editBtnX, editBtnY, editBtnW, editBtnH, 4, 150,50,150,255);
+                    drawText(rnd, editBtnX+10, editBtnY+(editBtnH-textHeight("A"))/2, "Edit", 255,255,255,255);
+
                     {
                         drawText(rnd,infoX,row4Y+(fieldH2-textHeight("A"))/2,"Gh:",80,80,80,255);
                         int fx=infoX+(int)(30*L.s),fw=fieldW2-(int)(20*L.s);
@@ -1550,6 +1664,33 @@ updateAndDrawParticles(rnd, stageX, stageY, stageW, stageH, dt);            int 
             for(int gy=wsY;gy<wsY+wsH;gy+=40) SDL_RenderDrawLine(rnd,wsX,gy,wsX+wsW,gy);
             drawText(rnd,wsX+10,wsY+5,"Code Workspace",150,150,160,255);
         }
+        if(costumeEditMode && costumeCanvas) {
+            int editorX = L.PALETTE_WIDTH + L.STAGE_WIDTH + 20;
+            int editorY = L.TOOLBAR_HEIGHT + 20;
+            int editorW = canvasW + 40;
+            int editorH = canvasH + 100;
+
+            SDL_SetRenderDrawColor(rnd, 60, 60, 80, 255);
+            SDL_Rect editorBg = {editorX, editorY, editorW, editorH};
+            SDL_RenderFillRect(rnd, &editorBg);
+
+            SDL_Rect canvasRect = {editorX+20, editorY+20, canvasW, canvasH};
+            SDL_RenderCopy(rnd, costumeCanvas, nullptr, &canvasRect);
+
+            int toolbarY = editorY + canvasH + 30;
+
+            fillRoundedRect(rnd, editorX+20, toolbarY, 60, 30, 4, 50,150,50,255);
+            drawText(rnd, editorX+30, toolbarY+5, "Pen", 255,255,255,255);
+
+            fillRoundedRect(rnd, editorX+90, toolbarY, 60, 30, 4, 150,50,50,255);
+            drawText(rnd, editorX+100, toolbarY+5, "Erase", 255,255,255,255);
+
+            fillRoundedRect(rnd, editorX+160, toolbarY, 60, 30, 4, 50,50,150,255);
+            drawText(rnd, editorX+170, toolbarY+5, "Save", 255,255,255,255);
+
+            fillRoundedRect(rnd, editorX+230, toolbarY, 60, 30, 4, 100,100,100,255);
+            drawText(rnd, editorX+240, toolbarY+5, "Exit", 255,255,255,255);
+        }
 
         // ── Draw workspace blocks ──
         {
@@ -1581,6 +1722,7 @@ updateAndDrawParticles(rnd, stageX, stageY, stageW, stageH, dt);            int 
     for(auto& sp : sprites){
         if(sp.uploadedTexture) SDL_DestroyTexture(sp.uploadedTexture);
     }
+    if(costumeCanvas) SDL_DestroyTexture(costumeCanvas);
     SDL_Quit();
     return 0;
 }
